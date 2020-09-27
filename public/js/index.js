@@ -2,10 +2,10 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import tankFile from "../tank.glb";
-import fontFile from "../fonts/helvetiker.json";
-import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
-import { Line2 } from "three/examples/jsm/lines/Line2.js";
-import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import fontFileBold from "three/examples/fonts/helvetiker_bold.typeface.json";
+import fontFile from "three/examples/fonts/helvetiker_regular.typeface.json";
+
+import { MeshLine, MeshLineMaterial, MeshLineRaycast } from "three.meshline";
 
 const animations = [];
 function registerAnimations(animation) {
@@ -18,7 +18,7 @@ function runAnimations() {
 
 var scene = new THREE.Scene();
 var camera = new THREE.PerspectiveCamera(
-  75,
+  85,
   window.innerWidth / window.innerHeight,
   0.1,
   1000
@@ -36,25 +36,87 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-renderer.setClearColor(0x5f85c4, 1);
+renderer.setClearColor(0x78c2d9, 1);
 
 var controls = new OrbitControls(camera, renderer.domElement);
+
+controls.maxPolarAngle = Math.PI / 2.1;
+controls.minPolarAngle = Math.PI / 8;
 
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-var geometry = new THREE.BoxGeometry(50, 1, 50);
+var geometry = new THREE.BoxGeometry(20, 1, 20);
 var material = new THREE.MeshLambertMaterial({
-  color: new THREE.Color(0xe8f0fb).convertSRGBToLinear(),
-  flatShading: true
+  color: new THREE.Color(0x88b14c), //.convertSRGBToLinear(),
+  flatShading: true,
 });
 var material2 = new THREE.MeshLambertMaterial({
   color: new THREE.Color(0x00ffff),
 });
 var cube = new THREE.Mesh(geometry, material);
+cube.position.y = -0.5;
 
+function createFlowLine({
+  start,
+  end,
+  color,
+  flowing,
+  dashOffset = 0.1,
+  dashRatio = 0.1,
+  dashArray = 0.2,
+}) {
+  const lineGometry = new THREE.Geometry();
+  console.log("flowStart", start);
+  console.log("flowEnd", end);
+  lineGometry.vertices.push(start);
+  lineGometry.vertices.push(end);
 
-function createTank({ tankModel, position }) {
+  const line = new MeshLine();
+  line.setPoints(lineGometry.vertices);
+  const material = new MeshLineMaterial({
+    color: color,
+    lineWidth: 0.15, // in pixels
+    dashOffset,
+    dashRatio,
+    dashArray,
+    resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+    //side: THREE.DoubleSide,
+    transparent: true,
+  });
+
+  const lineMesh = new THREE.Mesh(line, material);
+
+  if (flowing) {
+    registerAnimations(() => {
+      lineMesh.material.uniforms.dashOffset.value -= 0.002;
+    });
+  }
+
+  return lineMesh;
+}
+
+function createInactiveFlowLine({ start, end }) {
+  return createFlowLine({
+    color: 0x707070,
+    flowing: false,
+    start,
+    end,
+    dashArray: 0.05,
+    dashRatio: 0.4,
+  });
+}
+
+function createActiveFlowLine({ start, end }) {
+  return createFlowLine({
+    color: 0x09bee0,
+    flowing: true,
+    start,
+    end,
+  });
+}
+
+function createTank({ tankModel, position, fillPercentage, name }) {
   var s = 0.5;
   const tank = new THREE.Object3D();
   tank.position.y = position.y;
@@ -62,7 +124,7 @@ function createTank({ tankModel, position }) {
   tank.position.z = position.z;
   tank.scale.set(s, s, s);
   tank.add(tankModel);
-  const tankUI = createUI(tank);
+  const tankUI = createUI({ tank, fillPercentage, name });
   tank.add(tankUI);
 
   return tank;
@@ -73,34 +135,78 @@ loader.load(
   function (gltf) {
     var mesh = gltf.scene.children[0];
 
-    mesh.position.y = 1;
+    mesh.position.y = 0;
     mesh.position.x = 0;
     mesh.position.z = 0;
     mesh.castShadow = true;
-    const mesh2 =  mesh.clone()
     const tank = createTank({
+      name: "378493",
+      fillPercentage: 22,
       tankModel: mesh,
       position: { x: 0, y: 0, z: 0 },
     });
 
     const tank2 = createTank({
-     tankModel:mesh2,
-      position: { x: -2.5, y: 0, z: 0 },
+      name: "378493",
+      fillPercentage: 20,
+      tankModel: mesh.clone(),
+      position: { x: -3.5, y: 0, z: 0 },
     });
 
-   // var box = new THREE.BoxHelper( tank, 0xffff00 );
+    const tank3 = createTank({
+      name: "937832",
+      fillPercentage: 50,
+      tankModel: mesh.clone(),
+      position: { x: 1, y: 0, z: -4 },
+    });
 
+    const tank4 = createTank({
+      name: "123654",
+      fillPercentage: 67,
+      tankModel: mesh.clone(),
+      position: { x: 3, y: 0, z: 3 },
+    });
+
+    scene.add(
+      createActiveFlowLine({
+        start: tank2.getWorldPosition(),
+        end: tank.getWorldPosition(),
+      })
+    );
+
+    scene.add(
+      createActiveFlowLine({
+        start: tank.getWorldPosition(),
+        end: tank4.getWorldPosition(),
+      })
+    );
+
+    scene.add(
+      createInactiveFlowLine({
+        start: tank4.getWorldPosition(),
+        end: tank3.getWorldPosition(),
+      })
+    );
+
+    scene.add(
+      createInactiveFlowLine({
+        start: tank.getWorldPosition(),
+        end: tank3.getWorldPosition(),
+      })
+    );
+
+    // var box = new THREE.BoxHelper( tank, 0xffff00 );
 
     mesh.receiveShadow = true;
-    
+
     tank.userData.tester = "my tank";
-    console.log(tank)
+    console.log(tank);
     scene.add(tank);
 
-    console.log(tank)
+    console.log(tank);
     scene.add(tank2);
-
-    //scene.add(box)
+    scene.add(tank3);
+    scene.add(tank4);
   },
   undefined,
   function (error) {
@@ -138,23 +244,22 @@ light4.shadow.camera.far = 2500;
 //light4.shadow.bias = -0.0001;
 light4.shadow.radius = 8;
 var helper = new THREE.CameraHelper(light4.shadow.camera);
-scene.add(light4)
-scene.add(helper)
+scene.add(light4);
+//scene.add(helper);
 //Text
 
 let loader2 = new THREE.FontLoader();
-let font = loader2.parse(fontFile);
+let font = loader2.parse(fontFileBold);
 
-var text;
-var color = 0x6282bd;
+var color = 0xfaf9f9;
 
-function createUI(tank) {
-  var box = new THREE.Box3().setFromObject(tank)
+function createUI({ tank, fillPercentage, name }) {
+  var box = new THREE.Box3().setFromObject(tank);
   const center = box.getCenter().sub(tank.position.clone());
-  console.log(center)
+  console.log(center);
   const tankUI = new THREE.Object3D();
-  tankUI.position.set(center.x+0.3,center.y+1.1,center.z-0.1)
-  console.log(center)
+  tankUI.position.set(center.x + 0.3, center.y + 1.1, center.z - 0.1);
+  console.log(center);
 
   var g = new THREE.BoxGeometry(0.1, 2, 0.1);
 
@@ -176,72 +281,83 @@ function createUI(tank) {
 
   var message = "  Tank: \n183974";
 
-  var shapes = font.generateShapes(message, 0.3);
+  var tankNameText = new THREE.TextGeometry(message, {
+    font: font,
+    size: 0.3,
+    height: 0.01,
+  });
 
-  var geometry = new THREE.ShapeBufferGeometry(shapes);
+  var message = ` ${Number(fillPercentage)}%`;
+
+  var fillPercentText = new THREE.TextGeometry(message, {
+    font: font,
+    size: 0.5,
+    height: 0.01,
+  });
 
   // make shape ( N.B. edge view not visible )
 
-  text = new THREE.Mesh(geometry, matLite);
+  const text = new THREE.Mesh(fillPercentText, matLite);
   text.position.z = 0;
-  text.position.x = -1;
-  text.position.y = 1.8;
-
+  text.position.x = -1.7;
+  text.position.y = -0;
   text.geometry.center();
-  //text.rotateX(-Math.PI / 2);
-  var points = [0, 0, 0, -0.2, 1.2, 0, -1.7, 1.2, 0];
 
-  const linegeometry = new LineGeometry();
-  linegeometry.setPositions(points);
+  const text2 = new THREE.Mesh(tankNameText, matLite);
+  text2.position.z = 0;
+  text2.position.x = -1.7;
+  text2.position.y = 0.9;
+  text2.geometry.center();
 
-  var material = new LineMaterial({
-    color: color,
-    linewidth: 2, // in pixels
-    dashed: false,
+  const xx = new THREE.Geometry();
+
+  xx.vertices.push(new THREE.Vector3(0, -1.5, 0));
+  xx.vertices.push(new THREE.Vector3(-1, -0.5, 0));
+  xx.vertices.push(new THREE.Vector3(-2.5, -0.5, 0));
+
+  const line = new MeshLine();
+  line.setPoints(xx.vertices);
+
+  const material = new MeshLineMaterial({
+    color: 0xff00ff,
+    lineWidth: 0.05, // in pixels
+    resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
   });
 
-  material.resolution.set(window.innerWidth, window.innerHeight);
+  const mesh = new THREE.Mesh(line, material);
 
-  var line = new Line2(linegeometry, material);
-  tankUI.add(line);
+  tankUI.add(mesh);
 
   //tankUI.add(box);
   tankUI.add(text);
+  tankUI.add(text2);
 
   registerAnimations(() => {
-    tankUI.rotation.y = Math.atan2(
-      camera.position.x - text.position.x,
-      camera.position.z - text.position.z
-    );
+    tankUI.lookAt(new THREE.Vector3(camera.position.x, 0, camera.position.z));
   });
 
   return tankUI;
 }
 
-
-
-var mouse = new THREE.Vector2(), INTERSECTED;
-var radius = 100, theta = 0;
+var mouse = new THREE.Vector2(),
+  INTERSECTED;
+var radius = 100,
+  theta = 0;
 const raycaster = new THREE.Raycaster();
 
-window.addEventListener( 'click', onMouseClick, false );
+window.addEventListener("click", onMouseClick, false);
 
-function onMouseClick( event ) {
+function onMouseClick(event) {
+  // calculate mouse position in normalized device coordinates
+  // (-1 to +1) for both components
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-	// calculate mouse position in normalized device coordinates
-	// (-1 to +1) for both components
-	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
 
-
-  raycaster.setFromCamera( mouse, camera );
-  
-  var intersects = raycaster.intersectObjects( scene.children );
-  console.log(intersects.map(data=>data))
-
+  var intersects = raycaster.intersectObjects(scene.children);
+  console.log(intersects.map((data) => data));
 }
-
-
 
 //scene.add(light4);
 //scene.add(helper)
@@ -253,7 +369,6 @@ var animate = function () {
   controls.update();
 
   runAnimations();
-
 
   renderer.render(scene, camera);
 };
